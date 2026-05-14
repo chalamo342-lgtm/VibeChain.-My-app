@@ -1,0 +1,6 @@
+{
+  "name": "VibeChain",
+  "description": "A social video platform where videos are connected in viral story chains. Users can continue each other's videos, creating collaborative content journeys.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": []
+}

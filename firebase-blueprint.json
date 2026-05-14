@@ -1,0 +1,98 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User account information and statistics",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "username": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "bio": { "type": "string" },
+        "followerCount": { "type": "number" },
+        "followingCount": { "type": "number" },
+        "likeCount": { "type": "number" },
+        "chainCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "username", "displayName"]
+    },
+    "Video": {
+      "title": "Video",
+      "description": "A video posted by a user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "username": { "type": "string" },
+        "videoURL": { "type": "string" },
+        "thumbnailURL": { "type": "string" },
+        "caption": { "type": "string" },
+        "parentId": { "type": "string", "description": "The ID of the video this one is continuing" },
+        "rootId": { "type": "string", "description": "The ID of the first video in the chain" },
+        "chainId": { "type": "string", "description": "Group ID for the entire chain" },
+        "likeCount": { "type": "number" },
+        "commentCount": { "type": "number" },
+        "shareCount": { "type": "number" },
+        "viewCount": { "type": "number" },
+        "musicName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "videoURL", "createdAt"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "A comment on a video",
+      "type": "object",
+      "properties": {
+        "videoId": { "type": "string" },
+        "userId": { "type": "string" },
+        "username": { "type": "string" },
+        "userPhotoURL": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Call": {
+      "title": "Call Session",
+      "description": "Voice or video call session between users",
+      "type": "object",
+      "properties": {
+        "callerId": { "type": "string" },
+        "callerName": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "type": { "type": "string", "enum": ["voice", "video"] },
+        "status": { "type": "string", "enum": ["pending", "accepted", "declined", "ended"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["callerId", "receiverId", "type", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/videos/{videoId}": {
+      "schema": "Video",
+      "description": "Public video feed"
+    },
+    "/videos/{videoId}/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Comments on a video"
+    },
+    "/videos/{videoId}/likes/{userId}": {
+      "schema": "object",
+      "description": "Likers of a video"
+    },
+    "/users/{userId}/following/{followingUserId}": {
+      "schema": "object",
+      "description": "Users followed by this user"
+    },
+    "/calls/{callId}": {
+      "schema": "Call",
+      "description": "Active and past call sessions"
+    }
+  }
+}

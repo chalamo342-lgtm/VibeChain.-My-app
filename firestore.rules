@@ -1,0 +1,175 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper Functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Users ---
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.uid == request.auth.uid
+          && data.username is string && data.username.size() >= 3 && data.username.size() <= 30
+          && data.displayName is string && data.displayName.size() <= 50
+          && (data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 1024))
+          && (data.bio == null || (data.bio is string && data.bio.size() <= 500))
+          && data.followerCount is number
+          && data.followingCount is number
+          && data.likeCount is number
+          && data.chainCount is number
+          && data.keys().hasAll(['uid', 'username', 'displayName', 'photoURL', 'bio', 'followerCount', 'followingCount', 'likeCount', 'chainCount', 'createdAt'])
+          && data.keys().size() == 10;
+      }
+
+      allow read: if true;
+      allow create: if isOwner(userId)
+        && isValidUser(incoming())
+        && incoming().createdAt == request.time;
+      allow update: if isOwner(userId)
+        && isValidUser(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().diff(existing()).affectedKeys().hasOnly(['username', 'displayName', 'photoURL', 'bio', 'followerCount', 'followingCount', 'likeCount', 'chainCount']);
+
+      // --- Following ---
+      match /following/{followingUserId} {
+        allow read: if true;
+        allow write: if isOwner(userId);
+      }
+    }
+
+    // --- Videos ---
+    match /videos/{videoId} {
+      function isValidVideo(data) {
+        return isOwner(data.userId)
+          && data.username is string
+          && data.videoURL is string && data.videoURL.size() <= 1024
+          && (data.thumbnailURL == null || (data.thumbnailURL is string && data.thumbnailURL.size() <= 1024))
+          && (data.musicName == null || (data.musicName is string && data.musicName.size() <= 200))
+          && data.createdAt == request.time
+          && (data.parentId == null || (data.parentId is string && data.parentId.size() <= 128))
+          && (data.rootId == null || (data.rootId is string && data.rootId.size() <= 128))
+          && (data.chainId == null || (data.chainId is string && data.chainId.size() <= 128))
+          && data.caption is string && data.caption.size() <= 2200
+          && data.likeCount is number
+          && data.commentCount is number
+          && data.shareCount is number
+          && data.viewCount is number
+          && data.keys().hasAll(['userId', 'username', 'userPhotoURL', 'videoURL', 'thumbnailURL', 'musicName', 'caption', 'parentId', 'rootId', 'chainId', 'likeCount', 'commentCount', 'shareCount', 'viewCount', 'createdAt'])
+          && data.keys().size() == 15;
+      }
+
+      allow read: if true;
+      allow create: if isSignedIn()
+        && (incoming().parentId == null || exists(/databases/$(database)/documents/videos/$(incoming().parentId)))
+        && isValidVideo(incoming());
+      allow update: if (isOwner(existing().userId) || isSignedIn()) // isSignedIn for public stats like views/likes
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().diff(existing()).affectedKeys().hasOnly(['caption', 'likeCount', 'commentCount', 'shareCount', 'viewCount']);
+      allow delete: if isOwner(existing().userId);
+
+      // --- Likes ---
+      match /likes/{userId} {
+        allow read: if true;
+        allow write: if isOwner(userId);
+      }
+
+      // --- Comments ---
+      match /comments/{commentId} {
+        function isValidComment(data) {
+          return isOwner(data.userId)
+            && data.text is string && data.text.size() <= 500
+            && data.createdAt == request.time
+            && data.keys().hasAll(['userId', 'username', 'userPhotoURL', 'text', 'createdAt'])
+            && data.keys().size() == 5;
+        }
+        allow read: if true;
+        allow create: if isSignedIn() && isValidComment(incoming());
+        allow delete: if isOwner(existing().userId);
+      }
+    }
+
+    // --- Live Streams ---
+    match /liveStreams/{streamId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      
+      match /chat/{msgId} {
+        allow read, create: if isSignedIn();
+      }
+    }
+
+    // --- Calls ---
+    match /calls/{callId} {
+      function isValidCall(data) {
+        return data.callerId is string && data.callerId.size() <= 128
+          && data.receiverId is string && data.receiverId.size() <= 128
+          && data.type in ['voice', 'video']
+          && data.status in ['pending', 'accepted', 'declined', 'ended']
+          && (data.callerName == null || (data.callerName is string && data.callerName.size() <= 100))
+          && data.keys().hasAll(['callerId', 'callerName', 'receiverId', 'type', 'status', 'createdAt']);
+      }
+
+      allow get: if isSignedIn() && (
+        resource.data.callerId == request.auth.uid || 
+        resource.data.receiverId == request.auth.uid
+      );
+
+      allow list: if isSignedIn() && resource.data.callerId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.receiverId == request.auth.uid;
+      
+      allow create: if isSignedIn() 
+        && isValidCall(incoming())
+        && incoming().callerId == request.auth.uid
+        && incoming().createdAt == request.time;
+        
+      allow update: if isSignedIn() && (
+        resource.data.callerId == request.auth.uid || 
+        resource.data.receiverId == request.auth.uid
+      ) && isValidCall(incoming())
+      && incoming().callerId == resource.data.callerId
+      && incoming().receiverId == resource.data.receiverId
+      && incoming().createdAt == resource.data.createdAt
+      && incoming().diff(existing()).affectedKeys().hasAny(['status', 'offer', 'answer', 'callerCandidates', 'receiverCandidates', 'answeredAt', 'endedAt']);
+    }
+
+    // --- Messages ---
+    match /messages/{chatId} {
+      allow read: if isSignedIn(); // Add more granular checks based on participants if needed
+      
+      match /chat_messages/{msgId} {
+        allow read, create: if isSignedIn();
+      }
+    }
+
+    // --- Ads & Monetization ---
+    match /ads/{adId} {
+      allow read: if true;
+      allow create, update: if isSignedIn();
+    }
+  }
+}
